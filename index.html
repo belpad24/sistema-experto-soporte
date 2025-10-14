@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Experto de Soporte IA</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Carga de Lucide Icons (Íconos modernos) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Estilos personalizados para la tipografía moderna */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117; /* Fondo oscuro */
+        }
+        .diagnosis-card {
+            transition: all 0.3s ease-in-out;
+        }
+        .step-indicator {
+            transition: all 0.5s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-900">
+
+    <div id="app" class="min-h-screen p-4 sm:p-8 flex items-center justify-center">
+        <!-- El contenido se genera aquí por JavaScript -->
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://127.0.0.1:8000';
+        
+        // Estado inicial del sistema
+        let state = {
+            step: 1,
+            symptoms: {
+                app_lenta_o_congela: false,
+                app_cierra_inesperadamente: false,
+                instalacion_o_actualizacion_fallida: false,
+                pantalla_azul_o_negra_reciente: false,
+                periferico_no_detectado: false,
+            },
+            diagnosis: null,
+            sessionId: null,
+            isLoading: false,
+            error: null,
+        };
+
+        // Estructura y mapeo de síntomas (HECHOS) y diagnósticos
+        const symptomList = [
+            { key: 'app_lenta_o_congela', label: 'Aplicación Lenta o Congelada', icon: 'MonitorPlay' },
+            { key: 'app_cierra_inesperadamente', label: 'Aplicación se Cierra Sola', icon: 'XCircle' },
+            { key: 'instalacion_o_actualizacion_fallida', label: 'Instalación / Update Fallido', icon: 'Zap' },
+            { key: 'pantalla_azul_o_negra_reciente', label: 'Pantalla Azul o Bloqueo Reciente (BSOD)', icon: 'Bug' },
+            { key: 'periferico_no_detectado', label: 'Periférico (USB/Cámara) No Detectado', icon: 'Usb' },
+        ];
+
+        const DIAGNOSTICO_ICONS = {
+            RESTAURAR_SISTEMA_O_DRIVERS_CRITICOS: 'Power',
+            CONFLICTO_DE_SOFTWARE_O_LIBRERIAS: 'Cpu',
+            REINTENTAR_COMO_ADMINISTRADOR: 'Zap',
+            REINSTALAR_APLICACION_LIMPIANDO_CACHE: 'CheckCircle',
+            FINALIZAR_TAREA_Y_REINICIAR_APP: 'Power',
+            ACTUALIZAR_DRIVER_O_PUERTO: 'Usb',
+            REINICIAR_SISTEMA_SIMPLE: 'Power',
+        };
+
+        // Función de Renderizado Principal
+        function render() {
+            const app = document.getElementById('app');
+            if (!app) {
+                // Esto no debería pasar, pero es una capa de seguridad
+                console.error("Elemento 'app' no encontrado.");
+                return;
+            }
+            
+            let contentHTML = '';
+
+            // --- Header ---
+            const headerHTML = `
+                <header class="mb-8 border-b border-gray-700 pb-4">
+                    <h1 class="text-3xl sm:text-4xl font-extrabold text-teal-400 flex items-center">
+                        ${getIconSvg('Cpu', 32, 'mr-3')}
+                        Sistema Experto de Soporte IA
+                    </h1>
+                    <p class="text-gray-400 mt-1">Diagnóstico inteligente para problemas de software y drivers.</p>
+                </header>
+                <div class="flex justify-between items-center mb-10">
+                    ${renderStepIndicator(1, state.step, "1. Identificar Problema")}
+                    <div class="flex-grow h-0.5 bg-gray-700 mx-2 sm:mx-4 transition-colors duration-500"></div>
+                    ${renderStepIndicator(2, state.step, "2. Solución y Feedback")}
+                </div>
+                ${state.error ? renderError(state.error) : ''}
+            `;
+            
+            // --- Paso 1: Selección de Síntomas ---
+            if (state.step === 1) {
+                const isNextDisabled = Object.values(state.symptoms).every(v => v === false);
+                contentHTML = `
+                    <h2 class="text-2xl font-semibold mb-6 text-gray-200">¿Qué está sucediendo con tu sistema?</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        ${symptomList.map(renderSymptomCard).join('')}
+                    </div>
+                    <div class="flex justify-end mt-8">
+                        <button id="diagnoseButton" 
+                                ${isNextDisabled || state.isLoading ? 'disabled' : ''}
+                                class="flex items-center px-8 py-3 rounded-full font-bold transition-all duration-300 ${
+                                    isNextDisabled || state.isLoading
+                                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                                        : 'bg-teal-600 hover:bg-teal-500 shadow-lg shadow-teal-900/50 text-white'
+                                }">
+                            ${state.isLoading ? 
+                                `<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`
+                                : 'Diagnosticar Problema'
+                            }
+                            ${!state.isLoading ? getIconSvg('ArrowRight', 20, 'ml-2') : ''}
+                        </button>
+                    </div>
+                `;
+            }
+
+            // --- Paso 2: Diagnóstico y Feedback ---
+            else if (state.step === 2 && state.diagnosis) {
+                contentHTML = `
+                    ${renderDiagnosisCard(state.diagnosis)}
+                    
+                    <h3 class="text-xl font-semibold mt-8 mb-4 border-b border-gray-700 pb-2 text-gray-200">Pasos de Solución Detallados</h3>
+                    <ol class="space-y-3 list-decimal list-inside text-gray-300">
+                        ${state.diagnosis.detalles_recomendaciones.map((rec, index) => `
+                            <li class="pl-2 flex items-start">
+                                <span class="font-medium text-teal-400 mr-2">${index + 1}.</span>
+                                ${rec}
+                            </li>
+                        `).join('')}
+                    </ol>
+
+                    <div class="mt-12 pt-6 border-t border-gray-700">
+                        <h3 class="text-xl font-semibold mb-4 text-center text-teal-400">¿Esta Solución Resolvió el Problema?</h3>
+                        <div class="flex justify-center space-x-6">
+                            ${renderFeedbackButton('SÍ, Éxito', 'EXITOSO', 'green', 'CheckCircle')}
+                            ${renderFeedbackButton('NO, Falló', 'FALLIDO', 'red', 'XCircle')}
+                        </div>
+                        <button id="resetButton" class="mt-6 mx-auto block text-gray-400 hover:text-teal-400 transition-colors">
+                            ${getIconSvg('ArrowLeft', 16, 'inline mr-1')}
+                            Iniciar un Nuevo Diagnóstico
+                        </button>
+                    </div>
+                `;
+            }
+
+            // Envolvemos el contenido y lo inyectamos
+            app.innerHTML = `
+                <div class="w-full max-w-4xl bg-gray-800/80 backdrop-blur-md rounded-2xl shadow-2xl p-6 sm:p-10 text-white">
+                    ${headerHTML}
+                    ${contentHTML}
+                </div>
+            `;
+            
+            // --- Asignación de Eventos ---
+            attachEvents();
+            // Aseguramos que los íconos se rendericen después de inyectar el HTML
+            lucide.createIcons(); 
+        }
+        
+        // --- Funciones Auxiliares de Renderizado ---
+        
+        function getIconSvg(name, size = 24, classes = '') {
+            const Icon = lucide.icons[name];
+            if (!Icon) return '';
+            // Retorna el SVG string que lucide.createIcons() transformará en el icono real
+            return `<span class="${classes}" data-lucide="${name}" width="${size}" height="${size}"></span>`;
+        }
+
+
+        function renderStepIndicator(step, currentStep, label) {
+            const isActive = step === currentStep;
+            const isCompleted = step < currentStep;
+            
+            let circleContent = isCompleted ? getIconSvg('CheckCircle', 16) : step;
+            let circleClasses = "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-500";
+            let textClasses = "ml-3 text-sm font-semibold hidden sm:inline";
+
+            if (isCompleted) {
+                circleClasses += " bg-teal-500 text-gray-900";
+                textClasses += " text-teal-400";
+            } else if (isActive) {
+                circleClasses += " bg-teal-700 text-white ring-2 ring-teal-500";
+                textClasses += " text-white";
+            } else {
+                circleClasses += " bg-gray-600 text-gray-400";
+                textClasses += " text-gray-500";
+            }
+
+            return `
+                <div class="flex items-center step-indicator">
+                    <div class="${circleClasses}">
+                        ${circleContent}
+                    </div>
+                    <span class="${textClasses}">${label}</span>
+                </div>
+            `;
+        }
+
+        function renderError(message) {
+            return `
+                <div class="mb-4 p-4 bg-red-800/50 border border-red-700 text-red-300 rounded-lg flex items-center">
+                    ${getIconSvg('AlertTriangle', 20, 'mr-3')}
+                    <span class="font-semibold">${message}</span>
+                </div>
+            `;
+        }
+
+        function renderSymptomCard(symptom) {
+            const isSelected = state.symptoms[symptom.key];
+            const baseClasses = "flex flex-col items-center p-6 border-2 rounded-xl transition-all duration-300 cursor-pointer w-full h-32";
+            const activeClasses = "bg-teal-700 border-teal-500 shadow-xl shadow-teal-900/50 transform scale-[1.02] text-white";
+            const inactiveClasses = "bg-gray-700 border-gray-600 hover:bg-gray-600/70 text-gray-300";
+
+            return `
+                <div data-key="${symptom.key}" class="${baseClasses} ${isSelected ? activeClasses : inactiveClasses} symptom-card">
+                    ${getIconSvg(symptom.icon, 32, 'mb-2')}
+                    <span class="text-sm text-center font-medium">${symptom.label}</span>
+                </div>
+            `;
+        }
+        
+        function renderDiagnosisCard(diagnosis) {
+            const IconName = DIAGNOSTICO_ICONS[diagnosis.diagnostico_principal] || 'CheckCircle';
+            const alertClasses = diagnosis.alerta_ia && diagnosis.alerta_ia.length > 0 
+                ? "border-red-600 bg-red-900/40 text-red-300 mb-6"
+                : "border-teal-600 bg-teal-900/40 text-teal-300 mb-6";
+
+            return `
+                <div class="p-6 border rounded-xl shadow-lg diagnosis-card ${alertClasses}">
+                    <div class="flex items-center space-x-4">
+                        ${getIconSvg(IconName, 40, 'flex-shrink-0')}
+                        <div class='flex flex-col'>
+                            <h2 class="text-2xl font-bold text-white">
+                                Diagnóstico Principal:
+                            </h2>
+                            <p class="text-3xl font-extrabold text-white mt-1">
+                                ${diagnosis.diagnostico_principal.replace(/_/g, ' ')}
+                            </p>
+                        </div>
+                    </div>
+
+                    ${diagnosis.alerta_ia && diagnosis.alerta_ia.length > 0 ? `
+                        <div class="mt-4 p-3 bg-red-900 border border-red-700 rounded-lg">
+                            ${diagnosis.alerta_ia.map(alert => `
+                                <p class="text-sm font-semibold text-red-300 flex items-center">
+                                    ${getIconSvg('AlertTriangle', 16, 'mr-2 flex-shrink-0')}
+                                    ${alert}
+                                </p>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+        
+        function renderFeedbackButton(label, result, color, icon) {
+            const baseClasses = `flex items-center px-6 py-3 rounded-lg font-bold transition-all duration-300 text-white shadow-md`;
+            let dynamicClasses;
+
+            if (color === 'green') {
+                dynamicClasses = 'bg-green-600 hover:bg-green-500 shadow-green-900/50';
+            } else if (color === 'red') {
+                dynamicClasses = 'bg-red-600 hover:bg-red-500 shadow-red-900/50';
+            }
+
+            return `
+                <button data-result="${result}" class="feedback-button ${baseClasses} ${dynamicClasses}">
+                    ${getIconSvg(icon, 20, 'mr-2')}
+                    ${label}
+                </button>
+            `;
+        }
+
+        // --- Manejo de Estado y Eventos ---
+        
+        function attachEvents() {
+            // Eventos para selección de síntomas
+            document.querySelectorAll('.symptom-card').forEach(card => {
+                card.onclick = () => {
+                    const key = card.getAttribute('data-key');
+                    state.symptoms[key] = !state.symptoms[key];
+                    render();
+                };
+            });
+
+            // Evento para botón de diagnóstico
+            const diagnoseBtn = document.getElementById('diagnoseButton');
+            if (diagnoseBtn) {
+                diagnoseBtn.onclick = sendDiagnosis;
+            }
+            
+            // Eventos para botones de feedback
+            document.querySelectorAll('.feedback-button').forEach(btn => {
+                btn.onclick = (e) => sendFeedback(e.currentTarget.getAttribute('data-result'));
+            });
+
+            // Evento para botón de reinicio
+            const resetBtn = document.getElementById('resetButton');
+            if (resetBtn) {
+                resetBtn.onclick = resetSystem;
+            }
+            // Ejecutar la creación de íconos nuevamente después de adjuntar eventos
+            lucide.createIcons();
+        }
+
+        // --- Conexión con FastAPI ---
+        
+        async function sendDiagnosis() {
+            if (Object.values(state.symptoms).every(v => v === false)) return;
+
+            state.isLoading = true;
+            state.error = null;
+            render(); // Muestra el spinner
+
+            const maxRetries = 3;
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/diagnosticar`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(state.symptoms),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Estado: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    state.diagnosis = data;
+                    state.sessionId = data.sesion_id;
+                    state.step = 2; // Avanza al paso de diagnóstico
+                    state.isLoading = false;
+                    render();
+                    return; 
+                } catch (err) {
+                    if (attempt === maxRetries - 1) {
+                        console.error("Error al diagnosticar después de varios reintentos:", err);
+                        state.error = "No se pudo conectar con el Motor de Inferencia (FastAPI). Asegúrate de que el servidor esté corriendo en http://127.0.0.1:8000.";
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 1000 * (2 ** attempt)));
+                }
+            }
+             
+            state.isLoading = false;
+            render();
+        }
+
+        async function sendFeedback(result) {
+            if (!state.sessionId) return;
+
+            const maxRetries = 3;
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/feedback/${state.sessionId}?resultado=${result}`, {
+                        method: 'POST',
+                    });
+                    if (!response.ok) {
+                        throw new Error('Error al enviar el feedback.');
+                    }
+                    console.log(`Feedback registrado: ${result}. Esto mejora el aprendizaje del sistema.`);
+                    resetSystem();
+                    return; 
+                } catch (err) {
+                    if (attempt === maxRetries - 1) {
+                        console.error("Error al enviar feedback después de varios reintentos:", err);
+                        state.error = "Error al enviar feedback. Revisa la consola.";
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 1000 * (2 ** attempt)));
+                }
+            }
+        }
+
+        function resetSystem() {
+            state = {
+                step: 1,
+                symptoms: {
+                    app_lenta_o_congela: false,
+                    app_cierra_inesperadamente: false,
+                    instalacion_o_actualizacion_fallida: false,
+                    pantalla_azul_o_negra_reciente: false,
+                    periferico_no_detectado: false,
+                },
+                diagnosis: null,
+                sessionId: null,
+                isLoading: false,
+                error: null,
+            };
+            render();
+        }
+
+        // CORRECCIÓN CRÍTICA: Llamar a render() en window.onload para asegurar que todo el DOM esté listo
+        window.onload = render;
+    </script>
+</body>
+</html>
