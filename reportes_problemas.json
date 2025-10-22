@@ -1,0 +1,22 @@
+[
+    {
+        "id": "6cb1c555-b985-44c6-b68d-d22f21b3dd09",
+        "descripcion": "hola",
+        "timestamp": "2025-10-21T20:50:18.600117"
+    },
+    {
+        "id": "181eaff5-ca57-40ea-9863-03741148d787",
+        "descripcion": "hola",
+        "timestamp": "2025-10-21T20:58:06.736292"
+    },
+    {
+        "id": "350a39a8-8663-4a49-984f-ec81d7bfda2d",
+        "descripcion": "problema",
+        "timestamp": "2025-10-22T20:19:19.230059"
+    },
+    {
+        "id": "09b41274-6857-4964-a8ff-7d1b5a4e14bc",
+        "descripcion": "problema",
+        "timestamp": "2025-10-22T20:23:58.566713"
+    }
+]

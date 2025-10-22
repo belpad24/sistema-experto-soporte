@@ -2,7 +2,9 @@ from datetime import datetime
 import uvicorn
 import uuid
 from typing import List, Dict, Any
-
+from pydantic import BaseModel
+import json
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 # Importa la lógica experta y el modelo de datos desde la subcarpeta
@@ -59,7 +61,47 @@ def buscar_patrones(sintomas: Sintomas, diagnostico_principal: str) -> List[str]
         )
     return alerta_ia
 
+# Archivo JSON donde se guardarán los reportes
+JSON_FILE = "reportes_problemas.json"
+
+# Modelo de datos
+class Reporte(BaseModel):
+    descripcion: str
+
+# Crear archivo JSON si no existe
+if not os.path.exists(JSON_FILE):
+    with open(JSON_FILE, "w") as f:
+        json.dump([], f)
+
 # --- ENDPOINTS DE LA API ---
+
+@app.post("/reportar_problema")
+async def reportar_problema(reporte: Reporte):
+    try:
+        # Leer JSON existente
+        try:
+            with open(JSON_FILE, "r") as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            data = []
+
+        # Crear nueva entrada
+        nueva_entrada = {
+            "id": str(uuid.uuid4()),
+            "descripcion": reporte.descripcion,
+            "timestamp": datetime.now().isoformat()
+        }
+
+        data.append(nueva_entrada)
+
+        # Guardar nuevamente en JSON
+        with open(JSON_FILE, "w") as f:
+            json.dump(data, f, indent=4)
+
+        return {"mensaje": "Reporte guardado correctamente", "id": nueva_entrada["id"]}
+
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.post("/diagnosticar")
 async def diagnosticar_problema(sintomas: Sintomas):
