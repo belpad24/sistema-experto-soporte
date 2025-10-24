@@ -8,7 +8,11 @@ if defined _OLD_CODEPAGE (
     "%SystemRoot%\System32\chcp.com" 65001 > nul
 )
 
+<<<<<<< HEAD
 set VIRTUAL_ENV=C:\Users\Nicolas\Documents\cuatrimestre 4\sistema-experto-soporte\venv
+=======
+set VIRTUAL_ENV=C:\Users\Bel\Downloads\sistema-experto-soporte\venv
+>>>>>>> e6c8325 (actualizacion de paquetes)
 
 if not defined PROMPT set PROMPT=$P$G
 
